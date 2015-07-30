@@ -1,0 +1,13 @@
+//  Export for Replia Skecth plugin.
+//  export_replia.sketchscript
+//
+//  Created by Hirobe Kazuya on 2015/06/01.
+//  Copyright (c) 2015 Bunguu.
+//
+
+@import 'export_layers.js'
+
+function onRun(context) {
+  exportForReplia(context);
+  COScript.currentCOScript().garbageCollect();
+}
