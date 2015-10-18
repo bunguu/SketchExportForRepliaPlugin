@@ -253,13 +253,12 @@ function walkEditJson(json) {
 	return editJson;
 }
 
-function outputLayerAsImage(layer,folderPath,index) {
-
-	outputLayerAsPngWithScale(layer,folderPath+index,2,"@2x.png");
-	outputLayerAsPngWithScale(layer,folderPath+index,3,"@3x.png");
+function outputLayerAsImage(layer,folderPath,index,maskRect) {
+	outputLayerAsPngWithScale(layer,folderPath+index,2,"@2x.png",maskRect);
+	outputLayerAsPngWithScale(layer,folderPath+index,3,"@3x.png",maskRect);
 }
 
-function outputLayerAsPngWithScale(layer,path,scaleValue,suffix){
+function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 
 	// Clear all exportable sizes
   var exportSizes = [[layer exportOptions] sizes];
@@ -277,12 +276,20 @@ function outputLayerAsPngWithScale(layer,path,scaleValue,suffix){
   [layer select:true byExpandingSelection:true]
 
   var rect = [layer absoluteInfluenceRect];
+	if (maskRect) {
+		var left = Math.max(rect.origin.x,maskRect.left + _documentLeft);
+		var top = Math.max(rect.origin.y,maskRect.top + _documentTop);
+		var right = Math.min(rect.origin.x+rect.size.width,maskRect.right + _documentLeft);
+		var bottom = Math.min(rect.origin.y+rect.size.height,maskRect.bottom +  _documentTop);
+		rect = CGRectMake(left,top,right-left,bottom-top);
+	}
+
   var slices = [MSSliceMaker slicesFromExportableLayer:layer inRect:rect];
 
 	[doc saveArtboardOrSlice: slices[0] toFile: path+suffix];
 }
 
-function walksThrough(layer,folderPath,parentJson) {
+function walksThrough(layer,folderPath,parentJson,maskRect) {
 	//print(layer.treeAsDictionary());
 
 	var json = {};
@@ -295,18 +302,19 @@ function walksThrough(layer,folderPath,parentJson) {
 	var isRectView = false;
 
 	json['name'] = ""+layer.name();
-	json['bounds'] = parseFrame(layer,parentJson);
+	json['bounds'] = parseFrame(layer,parentJson,maskRect);
 	json['clipped'] = false;
 	json['visible'] = true;
 
 
 	if ([layer isMemberOfClass:[MSTextLayer class]])
 	{
-		outputLayerAsImage(layer,folderPath,json['id']);
+		outputLayerAsImage(layer,folderPath,json['id'],null);
 		json['needsImage'] = 'complete';
 
 		json['type'] = 'textLayer';
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,null);
+		json['bounds'] = parseFrame(layer,parentJson,null); //over write
 
 		var textItem = {};
 		var str = ""+[layer stringValue];
@@ -331,7 +339,7 @@ function walksThrough(layer,folderPath,parentJson) {
 
 		var textStyle = {};
 		textStyle['size'] = layer.fontSize();
-		textStyle['fontName'] = ""+layer.fontPostscriptName(); // nsfontを作って取得するべき
+		textStyle['fontName'] = ""+layer.fontPostscriptName();
 		textStyle['fontPostScriptName'] = ""+layer.fontPostscriptName();
 		textStyle['color'] = parseColor(textColor);
 		textStyle['leading'] = /*layer.fontSize() +*/ layer.lineSpacing();
@@ -345,9 +353,9 @@ function walksThrough(layer,folderPath,parentJson) {
 	}else if ([layer isKindOfClass:[MSRectangleShape class]])
 	{
 		json['type'] = 'shapeLayer';
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect);
 
-		outputLayerAsImage(layer,folderPath,json['id']);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
 		json['needsImage'] = 'complete';
 
 		var fillColor = parseFillColor(layer);
@@ -365,17 +373,17 @@ function walksThrough(layer,folderPath,parentJson) {
 	{
 		json['type'] = 'shapeLayer';
 		json['pngName'] = ""+layer.name();
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect);
 
-		outputLayerAsImage(layer,folderPath,json['id']);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
 		json['needsImage'] = 'complete';
 	}else if ([layer isKindOfClass:[MSShapeGroup class]])
 	{
 		json['type'] = 'shapeLayer';
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect);
 		var isImage = true;
 
-		outputLayerAsImage(layer,folderPath,json['id']);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
 		json['needsImage'] = 'complete';
 
 		// fillsが複数あるなら、imageにすべき？
@@ -458,20 +466,47 @@ function walksThrough(layer,folderPath,parentJson) {
 		json['bounds'] = json['boundsWithFX'];
 	}
 
+	if (layer.hasClippingMask() ) {
+		if (maskRect) {
+			json['nextMaskRect'] = {
+				'top': Math.max(json['bounds']['top'],maskRect.top),
+				'left': Math.max(json['bounds']['left'],maskRect.left),
+				'bottom': Math.min(json['bounds']['bottom'],maskRect.bottom),
+				'right': Math.min(json['bounds']['right'],maskRect.right)
+			};
+		}else {
+			json['nextMaskRect'] = {
+				'top':json['bounds']['top'],
+				'left':json['bounds']['left'],
+				'bottom':json['bounds']['bottom'],
+				'right':json['bounds']['right']
+			};
+		}
+	}
+
 	if (isRectView==false && !json['pngName'] &&
 			([layer isKindOfClass:[MSLayerGroup class]] ||
 						[layer isKindOfClass:[MSShapeGroup class]]))
 	{
-		outputLayerAsImage(layer,folderPath,json['id']);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
 		json['needsImage'] = 'complete';
 
 		var layers = [layer layers];
 
 		var jsons = [];
-		for (var i=0; i < [layers count]; i++)
+		var masks = [];
+		var currentMaskRect = maskRect;
+		for (var i= [layers count]-1; i>=0; i--)
 		{
+			var newMask = null;
 			var childLayer = [layers objectAtIndex:[layers count]-i-1];
-			jsons.push(walksThrough(childLayer,folderPath,json));
+			childJson = walksThrough(childLayer,folderPath,json,currentMaskRect);
+			jsons.unshift(childJson);
+
+			if (childJson['nextMaskRect']) {
+				currentMaskRect = childJson['nextMaskRect'];
+			}
+
 		}
 		json['layers'] = jsons;
 	}
@@ -497,7 +532,7 @@ function parseFillColor(layer) {
 	return null;
 }
 
-function parseImageFrame(layer,parentJson) {
+function parseImageFrame(layer,parentJson,maskRect) {
 //	return parseFrameW(layer,parentJson,true);
 
 	var rect = [layer absoluteInfluenceRect];
@@ -514,10 +549,17 @@ function parseImageFrame(layer,parentJson) {
 	item.right = Math.round(item.right * 1000)/1000 - _documentLeft;
 	item.bottom = Math.round(item.bottom * 1000)/1000 - _documentTop;
 
+	if (maskRect) {
+		item.left =	Math.max(maskRect.left, item.left);
+		item.top =	Math.max(maskRect.top, item.top);
+		item.right =	Math.min(maskRect.right, item.right);
+		item.bottom =	Math.min(maskRect.bottom, item.bottom);
+	}
+
 	return item;
 }
 
-function parseFrame(layer,parentJson) {
+function parseFrame(layer,parentJson,maskRect) {
 	var rect = [layer absoluteRect]; //GKRect
 
 	var item = {};
@@ -532,6 +574,13 @@ function parseFrame(layer,parentJson) {
 	item.top = Math.round(item.top * 1000)/1000 - _documentTop;
 	item.right = Math.round(item.right * 1000)/1000 - _documentLeft;
 	item.bottom = Math.round(item.bottom * 1000)/1000 - _documentTop;
+
+	if (maskRect) {
+		item.left =	Math.max(maskRect.left, item.left);
+		item.top =	Math.max(maskRect.top, item.top);
+		item.right =	Math.min(maskRect.right, item.right);
+		item.bottom =	Math.min(maskRect.bottom, item.bottom);
+	}
 
 	return item;
 }
