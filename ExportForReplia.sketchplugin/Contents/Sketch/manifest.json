@@ -3,7 +3,7 @@
   "description": "Sketch Plugins to export selected artboard or layers for Replia",
   "author": "Kazuya Hirobe",
   "homepage": "https://github.com/bunguu/SketchExportForRepliaPlugin",
-  "version": "1.0",
+  "version": "1.1",
   "identifier": "io.replia.sketch-export-replia-plugin",
   "compatibleVersion": "3.3.2",
   "bundleVersion": 1,
