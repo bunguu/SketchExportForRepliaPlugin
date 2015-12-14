@@ -284,7 +284,7 @@ function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 		rect = CGRectMake(left,top,right-left,bottom-top);
 	}
 
-  var slices = [MSSliceMaker slicesFromExportableLayer:layer inRect:rect];
+  var slices = [MSSliceMaker slicesFromExportableLayer:layer inRect:rect useIDForName:false];
 
 	[doc saveArtboardOrSlice: slices[0] toFile: path+suffix];
 }
