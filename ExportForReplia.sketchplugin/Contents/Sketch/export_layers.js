@@ -261,19 +261,21 @@ function outputLayerAsImage(layer,folderPath,index,maskRect) {
 function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 
 	// Clear all exportable sizes
-  var exportSizes = [[layer exportOptions] sizes];
-  while([exportSizes count] > 0) {
-    [[exportSizes firstObject] remove]
-  }
+    var exportFormats = [[layer exportOptions] exportFormats];
+    while([exportFormats count] > 0) {
+        [[exportFormats firstObject] remove];
+    }
 
-  var size = [[layer exportOptions] addExportSize]
-  [size setFormat:"png"]
-  [size setScale:scaleValue/ _importScale]
-  [size setName:""]
+    [[layer exportOptions] addExportFormat];
+    var format = [[[[layer exportOptions] exportFormats] array] lastObject];
+    //format.format = "png";
+    [format setFileFormat:"png"];
+    [format setScale:scaleValue/ _importScale];
+    [format setName:""];
 
-	var doc = _context.document;
-	[[doc currentPage] deselectAllLayers]
-  [layer select:true byExpandingSelection:true]
+  var doc = _context.document;
+  [[doc currentPage] deselectAllLayers];
+  [layer select:true byExpandingSelection:true];
 
   var rect = [layer absoluteInfluenceRect];
 	if (maskRect) {
@@ -284,9 +286,9 @@ function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 		rect = CGRectMake(left,top,right-left,bottom-top);
 	}
 
-  var slices = [MSSliceMaker slicesFromExportableLayer:layer inRect:rect useIDForName:false];
+    var slice = [MSExportRequest exportRequestFromExportFormat:format layer:layer inRect:rect useIDForName:false];
 
-	[doc saveArtboardOrSlice: slices[0] toFile: path+suffix];
+	[doc saveArtboardOrSlice: slice toFile: path+suffix];
 }
 
 function walksThrough(layer,folderPath,parentJson,maskRect) {
