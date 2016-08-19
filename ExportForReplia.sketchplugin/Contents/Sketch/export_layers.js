@@ -261,13 +261,10 @@ function outputLayerAsImage(layer,folderPath,index,maskRect) {
 function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 
 	// Clear all exportable sizes
-    var exportFormats = [[layer exportOptions] exportFormats];
-    while([exportFormats count] > 0) {
-        [[exportFormats firstObject] remove];
-    }
+    [layer exportOptions].removeAllExportFormats()
 
     [[layer exportOptions] addExportFormat];
-    var format = [[[[layer exportOptions] exportFormats] array] lastObject];
+    var format = [[[layer exportOptions] exportFormats] lastObject];
     //format.format = "png";
     [format setFileFormat:"png"];
     [format setScale:scaleValue/ _importScale];
@@ -344,7 +341,7 @@ function walksThrough(layer,folderPath,parentJson,maskRect) {
 		textStyle['fontName'] = ""+layer.fontPostscriptName();
 		textStyle['fontPostScriptName'] = ""+layer.fontPostscriptName();
 		textStyle['color'] = parseColor(textColor);
-		textStyle['leading'] = /*layer.fontSize() +*/ layer.lineSpacing();
+		textStyle['leading'] = /*layer.fontSize() +*/ layer.lineHeight();
 
 		textStyle['isTunedBox'] = true
 
