@@ -8,10 +8,6 @@
 
 var _layerIdGenerator = 1;
 // -- Utils
-var _documentTop = 0;
-var _documentLeft = 0;
-var _documentWidth = 0;
-var _documentHeight = 0;
 var _importScale = 1.0;
 var _context;
 
@@ -30,18 +26,15 @@ function exportForReplia(context) {
 	}
 
 	var selectedRect = calcSelectedRect();
-	_documentLeft = selectedRect[0];
-	_documentTop = selectedRect[1];
-	_documentWidth = selectedRect[2];
-	_documentHeight = selectedRect[3];
-	var importScale = selectImportScale(_documentWidth,_documentHeight);
+    var documentRect = selectedRect;
+	var importScale = selectImportScale(documentRect.size.width,documentRect.size.height);
 	if (importScale<0) {
 		return;
 	}
 
 	var savePath = pickFolder();
 	if (savePath) {
-		exportSelectedLayers(savePath+'/',importScale);
+		exportSelectedLayers(savePath+'/',importScale,documentRect);
 	}
 
 }
@@ -147,15 +140,13 @@ function calcSelectedRect() {
 			}
 		}
 	}
-	_documentLeft = dLeft;
-	_documentTop = dTop;
-	var documentWidth = dRight - dLeft;
-	var documentHeight = dBottom - dTop;
+	var width = dRight - dLeft;
+	var height = dBottom - dTop;
 
-	return [dLeft,dTop,documentWidth,documentHeight];
+	return CGRectMake(dLeft,dTop,width,height);
 }
 
-function exportSelectedLayers(folderPath,importScale) {
+function exportSelectedLayers(folderPath,importScale,documentRect) {
 	_importScale = importScale;
 
 	// if folder exists then remove it
@@ -189,7 +180,7 @@ function exportSelectedLayers(folderPath,importScale) {
 	for (var i=0; i < workLayers.length; i++)
 	{
 		var layer = workLayers[workLayers.length - i -1];
-		var layerJson = (walksThrough(layer,folderPath));
+		var layerJson = (walksThrough(layer,folderPath,null,null,documentRect));
 
 		jsons.push(layerJson);
 	}
@@ -207,8 +198,7 @@ function exportSelectedLayers(folderPath,importScale) {
 		json['bounds'] = json['layers'][0]['bounds'];
 
 	}
-	json['bounds'] = {'left':0,'top':0,'right':_documentWidth,'bottom':_documentHeight};
-
+	json['bounds'] = {'left':0,'top':0,'right':0+documentRect.size.width,'bottom':0+documentRect.size.height};
 
 	// walk throw artboard
 	var jsonText = ""+ JSON.stringify( json, undefined, 2);
@@ -253,12 +243,12 @@ function walkEditJson(json) {
 	return editJson;
 }
 
-function outputLayerAsImage(layer,folderPath,index,maskRect) {
-	outputLayerAsPngWithScale(layer,folderPath+index,2,"@2x.png",maskRect);
-	outputLayerAsPngWithScale(layer,folderPath+index,3,"@3x.png",maskRect);
+function outputLayerAsImage(layer,folderPath,index,maskRect,documentRect) {
+	outputLayerAsPngWithScale(layer,folderPath+index,2,"@2x.png",maskRect,documentRect);
+	outputLayerAsPngWithScale(layer,folderPath+index,3,"@3x.png",maskRect,documentRect);
 }
 
-function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
+function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect,documentRect) {
 
 	// Clear all exportable sizes
     [layer exportOptions].removeAllExportFormats()
@@ -276,10 +266,10 @@ function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 
   var rect = [layer absoluteInfluenceRect];
 	if (maskRect) {
-		var left = Math.max(rect.origin.x,maskRect.left + _documentLeft);
-		var top = Math.max(rect.origin.y,maskRect.top + _documentTop);
-		var right = Math.min(rect.origin.x+rect.size.width,maskRect.right + _documentLeft);
-		var bottom = Math.min(rect.origin.y+rect.size.height,maskRect.bottom +  _documentTop);
+		var left = Math.max(rect.origin.x,maskRect.left + documentRect.origin.x);
+		var top = Math.max(rect.origin.y,maskRect.top + documentRect.origin.y);
+		var right = Math.min(rect.origin.x+rect.size.width,maskRect.right + documentRect.origin.x);
+		var bottom = Math.min(rect.origin.y+rect.size.height,maskRect.bottom +  documentRect.origin.y);
 		rect = CGRectMake(left,top,right-left,bottom-top);
 	}
 
@@ -288,7 +278,7 @@ function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect) {
 	[doc saveArtboardOrSlice: slice toFile: path+suffix];
 }
 
-function walksThrough(layer,folderPath,parentJson,maskRect) {
+function walksThrough(layer,folderPath,parentJson,maskRect,documentRect) {
 	//print(layer.treeAsDictionary());
 
 	var json = {};
@@ -301,19 +291,18 @@ function walksThrough(layer,folderPath,parentJson,maskRect) {
 	var isRectView = false;
 
 	json['name'] = ""+layer.name();
-	json['bounds'] = parseFrame(layer,parentJson,maskRect);
+	json['bounds'] = parseFrame(layer,parentJson,maskRect,documentRect);
 	json['clipped'] = false;
 	json['visible'] = true;
 
-
 	if ([layer isMemberOfClass:[MSTextLayer class]])
 	{
-		outputLayerAsImage(layer,folderPath,json['id'],null);
+		outputLayerAsImage(layer,folderPath,json['id'],null,documentRect);
 		json['needsImage'] = 'complete';
 
 		json['type'] = 'textLayer';
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson,null);
-		json['bounds'] = parseFrame(layer,parentJson,null); //over write
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,null,documentRect);
+		json['bounds'] = parseFrame(layer,parentJson,null,documentRect); //over write
 
 		var textItem = {};
 		var str = ""+[layer stringValue];
@@ -352,9 +341,9 @@ function walksThrough(layer,folderPath,parentJson,maskRect) {
 	}else if ([layer isKindOfClass:[MSRectangleShape class]])
 	{
 		json['type'] = 'shapeLayer';
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect,documentRect);
 
-		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect,documentRect);
 		json['needsImage'] = 'complete';
 
 		var fillColor = parseFillColor(layer);
@@ -372,17 +361,17 @@ function walksThrough(layer,folderPath,parentJson,maskRect) {
 	{
 		json['type'] = 'shapeLayer';
 		json['pngName'] = ""+layer.name();
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect,documentRect);
 
-		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect,documentRect);
 		json['needsImage'] = 'complete';
 	}else if ([layer isKindOfClass:[MSShapeGroup class]])
 	{
 		json['type'] = 'shapeLayer';
-		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect);
+		json['boundsWithFX'] = parseImageFrame(layer,parentJson,maskRect,documentRect);
 		var isImage = true;
 
-		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect,documentRect);
 		json['needsImage'] = 'complete';
 
 		// fillsが複数あるなら、imageにすべき？
@@ -482,32 +471,76 @@ function walksThrough(layer,folderPath,parentJson,maskRect) {
 			};
 		}
 	}
-
+    //print("x:"+layer.frame().x() +",y:"+layer.frame().y());
 	if (isRectView==false && !json['pngName'] &&
 			([layer isKindOfClass:[MSLayerGroup class]] ||
-						[layer isKindOfClass:[MSShapeGroup class]]))
+						[layer isKindOfClass:[MSShapeGroup class]] ||
+                    [layer isKindOfClass:[MSSymbolInstance class]] ))
 	{
-		outputLayerAsImage(layer,folderPath,json['id'],maskRect);
+		outputLayerAsImage(layer,folderPath,json['id'],maskRect,documentRect);
 		json['needsImage'] = 'complete';
 
-		var layers = [layer layers];
+		var layers ;
+        var childDocumentRect = documentRect;
+//        layers = [];
+        if ([layer isKindOfClass:[MSSymbolInstance class]]) {
+            // find symbol artboard page
+            var documentData = _context.document.documentData();
+            var page = documentData.currentPage();
 
-		var jsons = [];
-		var masks = [];
-		var currentMaskRect = maskRect;
-		for (var i= [layers count]-1; i>=0; i--)
-		{
-			var newMask = null;
-			var childLayer = [layers objectAtIndex:[layers count]-i-1];
-			childJson = walksThrough(childLayer,folderPath,json,currentMaskRect);
-			jsons.unshift(childJson);
+            var symbolID = layer.symbolID();
+            //print("symbolID:"+symbolID);
 
-			if (childJson['nextMaskRect']) {
-				currentMaskRect = childJson['nextMaskRect'];
-			}
+            var filter = NSPredicate.predicateWithFormat("className == 'MSSymbolMaster'");
+            var artboards = documentData.allArtboards().filteredArrayUsingPredicate(filter);
+            var targetPage = findParentPage(findArtboardWithSymbol(artboards,symbolID));
+            if (targetPage) {
+                // make copy of the page and find the target symbol artboard
+                var artboardIndex = -1;
+                for (var i=0; i < targetPage.artboards().count(); i ++) {
+                    var targetArtboard = targetPage.artboards()[i];
+                    if (![targetArtboard isKindOfClass:[MSSymbolMaster class]]) { continue; }
+                    if (""+symbolID == ""+targetArtboard.symbolID() ) {
+                         artboardIndex = i;
+                    }
+                }
+                if (artboardIndex >= 0) {
+                    //print("targetPage:"+symbolID);
+                    var workPage = [targetPage copy];
+                    var workArtboards = workPage.artboards().filteredArrayUsingPredicate(filter);
+                    var workArtboard = workPage.artboards()[artboardIndex];
 
-		}
-		json['layers'] = jsons;
+                    layers = [workArtboard layers];
+                    //print(workArtboard.treeAsDictionary());
+                    var frame = workArtboard.frame();
+
+                    childDocumentRect = CGRectMake(frame.x()-json["bounds"].left,frame.y()-json["bounds"].top,frame.width(),frame.height());
+                    //print(childDocumentRect);
+                }
+            }
+
+        } else {
+            layers = [layer layers];
+        }
+
+        if (layers) {
+            var jsons = [];
+    		var masks = [];
+    		var currentMaskRect = maskRect;
+    		for (var i= [layers count]-1; i>=0; i--)
+    		{
+    			var newMask = null;
+    			var childLayer = [layers objectAtIndex:[layers count]-i-1];
+    			childJson = walksThrough(childLayer,folderPath,json,currentMaskRect,childDocumentRect);
+    			jsons.unshift(childJson);
+
+    			if (childJson['nextMaskRect']) {
+    				currentMaskRect = childJson['nextMaskRect'];
+    			}
+
+    		}
+    		json['layers'] = jsons;
+        }
 	}
 
 	_progressCount +=1;
@@ -531,7 +564,7 @@ function parseFillColor(layer) {
 	return null;
 }
 
-function parseImageFrame(layer,parentJson,maskRect) {
+function parseImageFrame(layer,parentJson,maskRect,documentRect) {
 //	return parseFrameW(layer,parentJson,true);
 
 	var rect = [layer absoluteInfluenceRect];
@@ -543,10 +576,10 @@ function parseImageFrame(layer,parentJson,maskRect) {
 	item.right = item.left + rect.size.width;
 	item.bottom = item.top + rect.size.height;
 
-	item.left = Math.round(item.left * 1000)/1000 - _documentLeft;
-	item.top = Math.round(item.top * 1000)/1000 - _documentTop;
-	item.right = Math.round(item.right * 1000)/1000 - _documentLeft;
-	item.bottom = Math.round(item.bottom * 1000)/1000 - _documentTop;
+	item.left = Math.round(item.left * 1000)/1000 - documentRect.origin.x;
+	item.top = Math.round(item.top * 1000)/1000 - documentRect.origin.y;
+	item.right = Math.round(item.right * 1000)/1000 - documentRect.origin.x;
+	item.bottom = Math.round(item.bottom * 1000)/1000 - documentRect.origin.y;
 
 	if (maskRect) {
 		item.left =	Math.max(maskRect.left, item.left);
@@ -558,9 +591,8 @@ function parseImageFrame(layer,parentJson,maskRect) {
 	return item;
 }
 
-function parseFrame(layer,parentJson,maskRect) {
+function parseFrame(layer,parentJson,maskRect,documentRect) {
 	var rect = [layer absoluteRect]; //GKRect
-
 	var item = {};
 
 	item.left = rect.x();
@@ -569,10 +601,10 @@ function parseFrame(layer,parentJson,maskRect) {
 	item.right = item.left + rect.width();
 	item.bottom = item.top + rect.height();
 
-	item.left = Math.round(item.left * 1000)/1000 - _documentLeft;
-	item.top = Math.round(item.top * 1000)/1000 - _documentTop;
-	item.right = Math.round(item.right * 1000)/1000 - _documentLeft;
-	item.bottom = Math.round(item.bottom * 1000)/1000 - _documentTop;
+	item.left = Math.round(item.left * 1000)/1000 - documentRect.origin.x;
+	item.top = Math.round(item.top * 1000)/1000 - documentRect.origin.y;
+	item.right = Math.round(item.right * 1000)/1000 - documentRect.origin.x;
+	item.bottom = Math.round(item.bottom * 1000)/1000 - documentRect.origin.y;
 
 	if (maskRect) {
 		item.left =	Math.max(maskRect.left, item.left);
@@ -606,4 +638,26 @@ function parseAlpha(layer,color) {
 		alpha *= color.alpha();
 	}
 	return alpha;
+}
+
+function findArtboardWithSymbol(artboards,symbolID) {
+    for (var i= 0; i<artboards.length; i++)
+    {
+        var artboard = artboards[i];
+        //print(""+symbolID + ","+artboard.symbolID());
+        if (""+symbolID == ""+artboard.symbolID() ) {
+            return artboard;
+        }
+    }
+    return null;
+}
+
+function findParentPage(layer) {
+    if (!layer) { return null; }
+    var parentGroup = [layer parentGroup];
+    if (!parentGroup) { return null; }
+    if ([parentGroup isKindOfClass:[MSPage class]]) {
+        return parentGroup;
+    }
+    return findParentPage(parentGroup);
 }
