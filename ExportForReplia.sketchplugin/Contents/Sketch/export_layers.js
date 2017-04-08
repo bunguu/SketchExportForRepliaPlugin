@@ -19,8 +19,8 @@ function exportForReplia(context) {
 
 	var filePaths = [];
 
-	var selectedLayers = doc.selectedLayers();
-	if ([selectedLayers count]==0) {
+	var selectedLayers = context.selection;
+	if (selectedLayers.count() ==0) {
 		showAlert("No layers are selected. Please select the artboard or layers before exporting.");
 		return;
 	}
