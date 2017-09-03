@@ -261,9 +261,15 @@ function outputLayerAsPngWithScale(layer,path,scaleValue,suffix,maskRect,documen
     [format setName:""];
 
   var doc = _context.document;
-  [[doc currentPage] deselectAllLayers];
-  [layer select:true byExpandingSelection:true];
-
+  var page = doc.currentPage();
+  if (MSApplicationMetadata.metadata().appVersion < 45) {
+    page.deselectAllLayers();
+    layer.select_byExpandingSelection(true, true);
+  } else {
+    page.changeSelectionBySelectingLayers_([]);
+    layer.select_byExtendingSelection(true, true);
+  }
+  
   var rect = [layer absoluteInfluenceRect];
 	if (maskRect) {
 		var left = Math.max(rect.origin.x,maskRect.left + documentRect.origin.x);
